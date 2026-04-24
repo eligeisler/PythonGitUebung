@@ -1,0 +1,65 @@
+name: Python CI Pipeline
+
+on:
+  # 1. Nach einem Push auf den main branch
+  push:
+    branches: [ "main" ]
+  # 2. Zeitgesteuert (z.B. jeden Tag um 12:00 UTC)
+  schedule:
+    - cron: '0 12 * * *'
+  # 3. Manuell ausgelöst über die Website
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Repository auschecken
+      uses: actions/checkout@v4
+
+    - name: Python einrichten
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10' # Passe die Version an deine Bedürfnisse an
+
+    - name: Abhängigkeiten installieren
+      run: |
+        python -m pip install --upgrade pip
+        pip install ruff bandit pip-audit pytest
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+    - name: Syntax Check (Kompilieren)
+      # Checkt die grundlegende Syntax aller Python-Dateien
+      run: python -m compileall .
+
+    - name: Linting mit Ruff (oder flake8/black)
+      # Wendet die gewählte Linting-Methode an
+      run: ruff check .
+
+    - name: Unit Tests ausführen
+      # Führt die Tests der letzten Aufgabe aus
+      run: pytest
+
+    - name: Security Check mit Bandit
+      # Überprüft den app-Ordner auf Sicherheitslücken
+      run: bandit -r app
+
+    - name: Vulnerability Check mit pip-audit
+      # Prüft die requirements.txt auf bekannte Schwachstellen
+      # Das "continue-on-error: true" verhindert, dass der Job hier sofort abbricht,
+      # falls Fehler gefunden werden, damit das Artefakt noch hochgeladen werden kann.
+      run: pip-audit -r requirements.txt -f json -o audit.json
+      continue-on-error: true
+
+    - name: Audit Report als Artefakt speichern
+      # Lädt die erzeugte audit.json hoch, damit du sie unter Actions/Run/Artifacts findest
+      uses: actions/upload-artifact@v4
+      with:
+        name: pip-audit-report
+        path: audit.json
+
+    - name: Markdown Linting (Marketplace Action)
+      uses: DavidAnson/markdownlint-cli2-action@v16
+      with:
+        globs: '**/*.md'
